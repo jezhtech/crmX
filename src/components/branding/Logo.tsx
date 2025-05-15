@@ -41,7 +41,7 @@ const Logo = ({ variant = "full", className, size = "medium" }: LogoProps) => {
     return (
       <div className="flex items-center">
         <img 
-          src="/lovable-uploads/db786a6f-bab1-461e-9e6e-e417e9298194.png" 
+          src="/images/logo.png" 
           alt="crmX Logo" 
           className={getSizeClasses()}
         />

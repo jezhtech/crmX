@@ -71,7 +71,7 @@ The application is configured for seamless deployment on Vercel with the include
 
 ## Copyright and License
 
-© 2024 Jezh Technologies Private Limited. All rights reserved.
+© 2025 Jezh Technologies Private Limited. All rights reserved.
 
 This software was developed by JezX, a brand of Jezh Technologies Private Limited, and Shabin. Unauthorized copying, distribution, modification, public display, or public performance of this software is strictly prohibited.
 
@@ -81,4 +81,4 @@ For licensing inquiries, please contact Jezh Technologies Private Limited.
 
 **Jezh Technologies Private Limited**
 - Website: [jezhtechnologies.com](https://jezhtechnologies.com)
-- Email: contact@jezhtechnologies.com
+- Email: info@jezhtechnologies.com
