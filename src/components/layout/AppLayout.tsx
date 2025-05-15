@@ -1,9 +1,10 @@
-
 import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import Footer from "./Footer";
+import ChatAssistant from "@/components/chat/ChatAssistant";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -45,7 +46,9 @@ const AppLayout = ({ children, requiredRole = "any" }: AppLayoutProps) => {
         <main className="flex-1 p-6 bg-gray-50">
           {children}
         </main>
+        <Footer />
       </div>
+      <ChatAssistant />
     </div>
   );
 };

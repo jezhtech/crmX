@@ -1,14 +1,66 @@
-
-import { useState } from "react";
-import { Bell, Search, User } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bell, Search, User, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import Logo from "@/components/branding/Logo";
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { getUserNotifications, Notification, markNotificationAsRead } from "@/services/chatAssistant";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Load notifications when user logs in
+  useEffect(() => {
+    if (user) {
+      loadNotifications();
+    }
+  }, [user]);
+
+  const loadNotifications = async () => {
+    if (!user) return;
+    
+    try {
+      const userNotifications = await getUserNotifications(user.id);
+      setNotifications(userNotifications);
+      
+      // Count unread notifications
+      const unread = userNotifications.filter(n => !n.isRead).length;
+      setUnreadCount(unread);
+    } catch (error) {
+      console.error("Error loading notifications:", error);
+    }
+  };
+
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      await markNotificationAsRead(notificationId);
+      
+      // Update notifications list
+      setNotifications(prev => 
+        prev.map(n => 
+          n.id === notificationId 
+            ? { ...n, isRead: true } 
+            : n
+        )
+      );
+      
+      // Update unread count
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -37,9 +89,68 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <button className="text-gray-500 hover:text-jezx-cyan">
-            <Bell className="h-5 w-5" />
-          </button>
+          <Popover open={showNotifications} onOpenChange={setShowNotifications}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5 text-gray-500 hover:text-jezx-cyan" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="end">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="font-medium">Notifications</h3>
+                {notifications.length > 0 && (
+                  <Button variant="ghost" size="sm" className="text-xs">
+                    Mark all as read
+                  </Button>
+                )}
+              </div>
+              
+              <ScrollArea className="h-80">
+                {notifications.length > 0 ? (
+                  <div>
+                    {notifications.map((notification) => (
+                      <div 
+                        key={notification.id} 
+                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 ${!notification.isRead ? 'bg-blue-50/30' : ''}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="text-sm font-medium">{notification.title}</h4>
+                            <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              {notification.timestamp instanceof Date 
+                                ? notification.timestamp.toLocaleString() 
+                                : new Date().toLocaleString()}
+                            </p>
+                          </div>
+                          {!notification.isRead && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6"
+                              onClick={() => notification.id && handleMarkAsRead(notification.id)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full p-4 text-gray-500">
+                    <Bell className="h-8 w-8 mb-2 text-gray-300" />
+                    <p className="text-sm">No notifications yet</p>
+                  </div>
+                )}
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
 
           <div className="relative">
             <button

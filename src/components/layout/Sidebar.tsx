@@ -11,6 +11,8 @@ import {
   File,
   Phone,
   Mail,
+  MessageSquare,
+  Activity,
 } from "lucide-react";
 
 const Sidebar = () => {
@@ -43,6 +45,16 @@ const Sidebar = () => {
             name: "Documents",
             icon: <File size={18} />,
             path: "/admin/documents",
+          },
+          {
+            name: "Chat Dashboard",
+            icon: <MessageSquare size={18} />,
+            path: "/admin/chat-dashboard",
+          },
+          {
+            name: "User Logs",
+            icon: <Activity size={18} />,
+            path: "/admin/user-logs",
           }
         ]
       : []),

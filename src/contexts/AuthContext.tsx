@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { AuthContextType, User } from "../types/auth";
 import { signIn, logOut, getCurrentUser } from "../services/auth";
 import { initializeUsers } from "../scripts/initUsers";
+import { logUserAction } from "../services/userLogs";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -21,6 +22,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const currentUser = await getCurrentUser();
         if (currentUser) {
           setUser(currentUser);
+          
+          // Log the user session restoration
+          await logUserAction(
+            currentUser.id,
+            currentUser.name || currentUser.email.split('@')[0],
+            "session",
+            "system",
+            "User session restored"
+          );
         }
       } catch (err) {
         console.error("Error initializing authentication:", err);
@@ -39,6 +49,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const loggedInUser = await signIn(email, password);
       setUser(loggedInUser);
+      
+      // Log the login action
+      await logUserAction(
+        loggedInUser.id,
+        loggedInUser.name || loggedInUser.email.split('@')[0],
+        "login",
+        "user",
+        `User logged in: ${loggedInUser.email}`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
       console.error(err);
@@ -49,6 +68,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
+      // Log the logout action if user exists
+      if (user) {
+        await logUserAction(
+          user.id,
+          user.name || user.email.split('@')[0],
+          "logout",
+          "user",
+          `User logged out: ${user.email}`
+        );
+      }
+      
       await logOut();
       setUser(null);
     } catch (err) {

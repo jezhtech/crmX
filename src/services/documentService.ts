@@ -18,7 +18,7 @@ import {
   getDownloadURL,
   deleteObject
 } from 'firebase/storage';
-import { db, storage } from '../lib/firebase';
+import { db, storage, safeUploadFile, enhancedUploadFile } from '../lib/firebase';
 
 export type DocumentType = 
   | 'proposal' 
@@ -59,6 +59,16 @@ export interface DocumentInput {
   description?: string;
   tags?: string[];
   uploadedBy: string;
+}
+
+// Define an interface for upload results
+interface UploadResult {
+  success: boolean;
+  url?: string;
+  ref?: any;
+  error?: any;
+  isLocal?: boolean;
+  metadata?: any;
 }
 
 // Get all documents
@@ -224,7 +234,7 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
   try {
     console.log('Starting document upload:', documentData.fileName);
     
-    // 1. Upload file to Firebase Storage
+    // 1. Upload file to Firebase Storage using our enhanced method with fallback
     const file = documentData.file;
     
     // Use the original file name if provided, otherwise use the file's name
@@ -233,9 +243,9 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
     // Create a unique identifier but keep the original file name
     const referenceNumber = Date.now().toString();
     const storageFileName = `${referenceNumber}_${originalFileName}`;
-    const storageRef = ref(storage, `documents/${storageFileName}`);
+    const storagePath = `documents/${storageFileName}`;
     
-    console.log('Storage reference created:', storageRef.fullPath);
+    console.log('Creating storage path:', storagePath);
     
     try {
       // Add metadata with content type
@@ -248,14 +258,23 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
         }
       };
       
-      const uploadTask = await uploadBytes(storageRef, file, metadata);
-      console.log('File uploaded successfully. Metadata:', uploadTask.metadata);
+      // Use the enhanced upload method with fallback
+      const uploadResult = await enhancedUploadFile(storagePath, file, metadata) as UploadResult;
       
-      const fileUrl = await getDownloadURL(uploadTask.ref);
+      if (!uploadResult.success) {
+        throw new Error("Upload failed: " + (uploadResult.error || "Unknown error"));
+      }
+      
+      console.log('File uploaded successfully.');
+      
+      const fileUrl = uploadResult.url;
       console.log('Download URL obtained:', fileUrl);
       
+      // Check if it's a local storage file
+      const isLocalStorage = !!uploadResult.isLocal;
+      
       // 2. Create document record in Firestore
-      const docData = {
+      const docData: any = {
         fileName: documentData.fileName,
         originalFileName: originalFileName,
         fileUrl: fileUrl,
@@ -271,6 +290,12 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
+      
+      // Add local storage info if applicable
+      if (isLocalStorage) {
+        docData.isLocalStorage = true;
+        docData.localMetadata = uploadResult.metadata;
+      }
       
       console.log('Creating Firestore document with data:', docData);
       

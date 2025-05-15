@@ -73,7 +73,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { v4 as uuidv4 } from 'uuid';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { collection, addDoc } from 'firebase/firestore';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, safeUploadFile, enhancedUploadFile } from '@/lib/firebase';
 import { Progress } from "@/components/ui/progress";
 
 // Form validation schema
@@ -98,6 +98,16 @@ const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'client_document', label: 'Client Document' },
   { value: 'other', label: 'Other' }
 ];
+
+// Add a type definition for upload results
+interface UploadResult {
+  success: boolean;
+  url?: string;
+  ref?: any;
+  error?: any;
+  isLocal?: boolean;
+  metadata?: any;
+}
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -526,19 +536,25 @@ const AdminDocuments = () => {
         console.log("Creating document with simple ID:", documentId);
         
         // 1. Create a very simple storage path - avoid special characters
-        const simplePath = `doc_${timestamp}`;
-        const storageRef = ref(storage, simplePath);
+        const simplePath = `documents/doc_${timestamp}`;
         console.log("Using simplified storage path:", simplePath);
         
-        // 2. Perform the basic upload with no extra metadata to avoid CORS issues
-        console.log("Starting basic upload...");
-        const uploadResult = await uploadBytes(storageRef, localFile);
-        console.log("Upload completed successfully:", uploadResult);
+        // 2. Use our enhanced upload function with local fallback
+        console.log("Starting upload with fallback...");
+        const uploadResult = await enhancedUploadFile(simplePath, localFile) as UploadResult;
         
-        // 3. Get the download URL
-        console.log("Getting download URL...");
-        const downloadUrl = await getDownloadURL(uploadResult.ref);
+        if (!uploadResult.success) {
+          throw new Error("Upload failed: " + (uploadResult.error || "Unknown error"));
+        }
+        
+        console.log("Upload completed successfully");
+        
+        // 3. Get the download URL from result
+        const downloadUrl = uploadResult.url;
         console.log("Download URL:", downloadUrl);
+        
+        // Add a flag for local storage files to track and handle them differently
+        const isLocalStorage = !!uploadResult.isLocal;
         
         // 4. Store the document metadata in Firestore
         console.log("Saving document metadata to Firestore...");
@@ -556,18 +572,27 @@ const AdminDocuments = () => {
           description: localDescription || "",
           tags: [],
           uploadedBy: user?.id || "anonymous",
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          isLocalStorage: isLocalStorage, // Track if it's a local storage file
+          localMetadata: isLocalStorage ? uploadResult.metadata : null
         };
         
         // Save to Firestore
         await addDoc(collection(db, 'documents'), docData);
         console.log("Document metadata saved to Firestore");
         
-        // Show success message
-        toast({
-          title: 'Document uploaded',
-          description: 'Document has been successfully uploaded and saved',
-        });
+        // Show success message with info about local storage if applicable
+        if (isLocalStorage) {
+          toast({
+            title: 'Document uploaded locally',
+            description: 'Document saved in browser storage due to connection issues. It will be available until you close this browser window.',
+          });
+        } else {
+          toast({
+            title: 'Document uploaded',
+            description: 'Document has been successfully uploaded and saved',
+          });
+        }
         
         // Close dialog and reset form
         setAddDialogOpen(false);
@@ -773,7 +798,7 @@ const AdminDocuments = () => {
   return (
     <AppLayout requiredRole="admin">
       <ErrorBoundary>
-        <div className="space-y-6">
+      <div className="space-y-6">
           {leadDocumentView ? (
             // Lead documents view
             <div className="space-y-4">
@@ -789,20 +814,20 @@ const AdminDocuments = () => {
                   Back to All Documents
                 </Button>
               </div>
-              
-              <div className="flex gap-4 items-center">
-                <div className="relative flex-1">
-                  <div className="absolute inset-y-0 left-0 flex items-center pl-3">
-                    <Search className="h-4 w-4 text-gray-400" />
-                  </div>
-                  <input
-                    type="search"
+        
+        <div className="flex gap-4 items-center">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+              <Search className="h-4 w-4 text-gray-400" />
+            </div>
+            <input
+              type="search"
                     placeholder="Search lead documents..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-crm-purple focus:ring-1 focus:ring-crm-purple"
-                  />
-                </div>
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full rounded-md border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-crm-purple focus:ring-1 focus:ring-crm-purple"
+            />
+          </div>
                 <Button 
                   onClick={() => {
                     form.setValue("leadId", selectedLead?.id || "");
@@ -812,26 +837,26 @@ const AdminDocuments = () => {
                   <FileUp className="h-4 w-4 mr-2" />
                   Upload Document
                 </Button>
-              </div>
-              
-              <Tabs 
-                defaultValue="all" 
-                value={currentTab}
+        </div>
+        
+        <Tabs 
+          defaultValue="all" 
+          value={currentTab}
                 onValueChange={(value) => setCurrentTab(value as "all" | DocumentType)}
-                className="w-full"
-              >
+          className="w-full"
+        >
                 <TabsList className="grid grid-cols-4 md:flex md:w-auto">
-                  <TabsTrigger value="all">All Documents</TabsTrigger>
-                  <TabsTrigger value="proposal">Proposals</TabsTrigger>
-                  <TabsTrigger value="invoice">Invoices</TabsTrigger>
-                  <TabsTrigger value="contract">Contracts</TabsTrigger>
+            <TabsTrigger value="all">All Documents</TabsTrigger>
+            <TabsTrigger value="proposal">Proposals</TabsTrigger>
+            <TabsTrigger value="invoice">Invoices</TabsTrigger>
+            <TabsTrigger value="contract">Contracts</TabsTrigger>
                   <TabsTrigger value="receipt">Receipts</TabsTrigger>
                   <TabsTrigger value="project_closure">Closure</TabsTrigger>
                   <TabsTrigger value="project_details">Details</TabsTrigger>
                   <TabsTrigger value="client_document">Client Docs</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value={currentTab} className="mt-4">
+          </TabsList>
+          
+          <TabsContent value={currentTab} className="mt-4">
                   <DocumentList 
                     documents={leadDocuments.filter(doc => 
                       currentTab === "all" || doc.type === currentTab
@@ -891,7 +916,7 @@ const AdminDocuments = () => {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+            </div>
               
               <Tabs 
                 defaultValue="all" 
@@ -925,9 +950,9 @@ const AdminDocuments = () => {
                       }
                     }}
                   />
-                </TabsContent>
-              </Tabs>
-            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
           )}
         </div>
 

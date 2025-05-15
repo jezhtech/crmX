@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 // Auth
 import Login from "./pages/Login";
@@ -15,6 +16,8 @@ import AdminLeadDetail from "./pages/admin/AdminLeadDetail";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminDocuments from "./pages/admin/AdminDocuments";
+import ChatDashboard from "./pages/admin/ChatDashboard";
+import UserLogs from "./pages/admin/UserLogs";
 
 // User routes
 import UserDashboard from "./pages/user/UserDashboard";
@@ -44,6 +47,8 @@ const App = () => (
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/settings" element={<AdminSettings />} />
             <Route path="/admin/documents" element={<AdminDocuments />} />
+            <Route path="/admin/chat-dashboard" element={<ChatDashboard />} />
+            <Route path="/admin/user-logs" element={<UserLogs />} />
             
             {/* User routes */}
             <Route path="/dashboard" element={<UserDashboard />} />
@@ -57,6 +62,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
+        <SpeedInsights />
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
