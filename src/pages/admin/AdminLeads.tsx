@@ -145,25 +145,25 @@ const AdminLeads = () => {
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [isFiltered, setIsFiltered] = useState(false);
 
-  useEffect(() => {
-    const fetchLeads = async () => {
-      setIsLoading(true);
-      try {
-        const fetchedLeads = await getAllLeads();
-        setLeads(fetchedLeads);
-        setFilteredLeads(fetchedLeads);
-      } catch (error) {
-        console.error("Error fetching leads:", error);
-        toast({
-          title: "Error loading leads",
-          description: "There was a problem loading the leads data",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchLeads = async () => {
+    setIsLoading(true);
+    try {
+      const fetchedLeads = await getAllLeads();
+      setLeads(fetchedLeads);
+      setFilteredLeads(fetchedLeads);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+      toast({
+        title: "Error loading leads",
+        description: "There was a problem loading the leads data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchLeads();
   }, [toast]);
   
@@ -245,6 +245,7 @@ const AdminLeads = () => {
                           <SelectItem value="qualified">Qualified</SelectItem>
                           <SelectItem value="proposal">Proposal</SelectItem>
                           <SelectItem value="project">Project</SelectItem>
+                          <SelectItem value="rejected">Rejected</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -416,7 +417,7 @@ const AdminLeads = () => {
             </div>
           )}
           
-          <LeadList leads={filteredLeads} isAdmin={true} />
+          <LeadList leads={filteredLeads} isAdmin={true} onLeadUpdated={fetchLeads} />
         </div>
       )}
     </AppLayout>

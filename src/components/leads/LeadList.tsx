@@ -13,6 +13,7 @@ import { Lead } from "@/types/lead";
 import { Button } from "@/components/ui/button";
 import LeadStatusBadge from "./LeadStatusBadge";
 import { formatCurrency } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Import dialog components
 import EditLeadDialog from "@/components/leads/EditLeadDialog";
@@ -23,9 +24,10 @@ import ViewLeadDialog from "@/components/leads/ViewLeadDialog";
 interface LeadListProps {
   leads: Lead[];
   isAdmin?: boolean;
+  onLeadUpdated?: () => void;
 }
 
-const LeadList = ({ leads, isAdmin = false }: LeadListProps) => {
+const LeadList = ({ leads, isAdmin = false, onLeadUpdated }: LeadListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState<keyof Lead | null>(null);
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -273,18 +275,21 @@ const LeadList = ({ leads, isAdmin = false }: LeadListProps) => {
             open={editDialogOpen} 
             onOpenChange={setEditDialogOpen} 
             lead={selectedLead} 
+            onLeadUpdated={onLeadUpdated}
           />
           
           <UpdateStatusDialog 
             open={statusDialogOpen} 
             onOpenChange={setStatusDialogOpen} 
             lead={selectedLead} 
+            onStatusUpdated={onLeadUpdated}
           />
           
           <AddNoteDialog 
             open={noteDialogOpen} 
             onOpenChange={setNoteDialogOpen} 
             lead={selectedLead} 
+            onNoteAdded={onLeadUpdated}
           />
           
           <ViewLeadDialog 

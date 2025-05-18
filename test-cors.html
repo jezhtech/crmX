@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Storage CORS Test</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+    .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; white-space: pre-wrap; }
+    button { padding: 8px 16px; background: #4285f4; color: white; border: none; cursor: pointer; }
+    button:hover { background: #3b78e7; }
+    input { padding: 8px; width: 300px; }
+  </style>
+</head>
+<body>
+  <h1>Firebase Storage CORS Test</h1>
+  
+  <div>
+    <h2>Test 1: Direct Storage Access</h2>
+    <button id="testStorage">Test Storage Access</button>
+    <div id="storageResult" class="result">Results will appear here...</div>
+  </div>
+  
+  <div>
+    <h2>Test 2: Upload File</h2>
+    <input type="file" id="fileInput">
+    <button id="uploadFile">Upload File</button>
+    <div id="uploadResult" class="result">Results will appear here...</div>
+  </div>
+
+  <script>
+    // Firebase configuration from your app
+    const firebaseConfig = {
+      apiKey: "AIzaSyBRxy-x5wkhAOOXhbXUsP7vCQZBtCVhYf0",
+      authDomain: "crmx-aac39.firebaseapp.com",
+      projectId: "crmx-aac39",
+      storageBucket: "crmx-aac39.appspot.com",
+      messagingSenderId: "609821268308",
+      appId: "1:609821268308:web:202ab8935305fd1e35d0c1",
+      measurementId: "G-6VF6C1F2QR"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const storage = firebase.storage();
+    
+    // Test 1: Direct Storage Access
+    document.getElementById('testStorage').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('storageResult');
+      resultDiv.textContent = 'Testing...';
+      
+      try {
+        // Try to list files in a test directory
+        const storageRef = storage.ref('test');
+        
+        try {
+          const listResult = await storageRef.listAll();
+          resultDiv.textContent = `SUCCESS! Found ${listResult.items.length} items in test directory.`;
+        } catch (error) {
+          resultDiv.textContent = `Error listing files: ${error.message}\n\nTrying to get metadata instead...`;
+          
+          // Try to get metadata as an alternative test
+          try {
+            const metadata = await storage.ref().child('test.txt').getMetadata();
+            resultDiv.textContent = `SUCCESS! Got metadata: ${JSON.stringify(metadata, null, 2)}`;
+          } catch (metaError) {
+            resultDiv.textContent += `\n\nMetadata test failed: ${metaError.message}`;
+          }
+        }
+      } catch (error) {
+        resultDiv.textContent = `ERROR: ${error.message}`;
+      }
+    });
+    
+    // Test 2: Upload File
+    document.getElementById('uploadFile').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('uploadResult');
+      const fileInput = document.getElementById('fileInput');
+      
+      if (!fileInput.files.length) {
+        resultDiv.textContent = 'Please select a file first!';
+        return;
+      }
+      
+      const file = fileInput.files[0];
+      resultDiv.textContent = `Uploading ${file.name}...`;
+      
+      try {
+        // Create a unique filename
+        const filename = `test-upload-${Date.now()}-${file.name}`;
+        const storageRef = storage.ref(`test-uploads/${filename}`);
+        
+        // Log current origin
+        const origin = window.location.origin;
+        resultDiv.textContent += `\nUploading from origin: ${origin}`;
+        
+        // Upload file
+        const uploadTask = storageRef.put(file);
+        
+        // Listen for state changes
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            resultDiv.textContent = `Uploading ${file.name}: ${progress.toFixed(1)}% complete`;
+          },
+          (error) => {
+            resultDiv.textContent = `Upload failed: ${error.message}`;
+            
+            // Detailed error information
+            if (error.serverResponse) {
+              resultDiv.textContent += `\n\nServer response: ${error.serverResponse}`;
+            }
+            
+            resultDiv.textContent += `\n\nError code: ${error.code}`;
+          },
+          async () => {
+            // Upload completed successfully
+            try {
+              const downloadURL = await uploadTask.snapshot.ref.getDownloadURL();
+              resultDiv.textContent = `Upload successful!\n\nFile available at: ${downloadURL}`;
+            } catch (urlError) {
+              resultDiv.textContent = `Upload completed but couldn't get URL: ${urlError.message}`;
+            }
+          }
+        );
+      } catch (error) {
+        resultDiv.textContent = `ERROR: ${error.message}`;
+      }
+    });
+  </script>
+</body>
+</html> 

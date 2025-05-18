@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { LeadStage } from "@/types/lead";
 import { addLead } from "@/services/leadService";
+import { createNewLeadNotification } from "@/services/notificationService";
 
 import {
   Dialog,
@@ -41,7 +42,7 @@ const formSchema = z.object({
   address: z.string().min(1, "Address is required"),
   projectRequirementTitle: z.string().min(1, "Project title is required"),
   projectRequirementDetails: z.string().min(1, "Project details are required"),
-  stage: z.enum(["new", "contacted", "qualified", "proposal", "project"] as const),
+  stage: z.enum(["new", "contacted", "qualified", "proposal", "project", "rejected"] as const),
   value: z.coerce.number().min(0, "Value must be positive").default(0)
 });
 
@@ -78,7 +79,8 @@ const AddLeadDialog = ({ open, onOpenChange, onLeadAdded }: AddLeadDialogProps) 
     
     setIsSubmitting(true);
     try {
-      await addLead({
+      // Add the lead
+      const leadId = await addLead({
         name: data.name,
         company: data.company,
         email: data.email,
@@ -94,6 +96,27 @@ const AddLeadDialog = ({ open, onOpenChange, onLeadAdded }: AddLeadDialogProps) 
         title: "Lead added successfully",
         description: "The lead has been added to your dashboard",
       });
+      
+      // Create notification for admins
+      await createNewLeadNotification(
+        {
+          id: leadId,
+          name: data.name,
+          company: data.company,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          projectRequirementTitle: data.projectRequirementTitle,
+          projectRequirementDetails: data.projectRequirementDetails,
+          stage: data.stage,
+          value: data.value,
+          assignedTo: user.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          notes: []
+        }, 
+        user.name || user.email || "Unknown user"
+      );
       
       form.reset();
       onOpenChange(false);
@@ -242,6 +265,7 @@ const AddLeadDialog = ({ open, onOpenChange, onLeadAdded }: AddLeadDialogProps) 
                         <SelectItem value="qualified">Qualified</SelectItem>
                         <SelectItem value="proposal">Proposal</SelectItem>
                         <SelectItem value="project">Project</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

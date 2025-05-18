@@ -79,7 +79,7 @@ const UserLeads = () => {
       ) : error ? (
         <div className="text-center py-8 text-red-500">{error}</div>
       ) : (
-        <LeadList leads={leads} />
+        <LeadList leads={leads} onLeadUpdated={fetchLeads} />
       )}
       
       <AddLeadDialog 

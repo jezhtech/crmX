@@ -18,7 +18,7 @@ import {
   getDownloadURL,
   deleteObject
 } from 'firebase/storage';
-import { db, storage, safeUploadFile, enhancedUploadFile } from '../lib/firebase';
+import { db, storage, safeUploadFile, enhancedUploadFile, localStorageFallback } from '@/lib/firebase';
 
 export type DocumentType = 
   | 'proposal' 
@@ -240,28 +240,50 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
     // Use the original file name if provided, otherwise use the file's name
     const originalFileName = documentData.originalFileName || file.name;
     
-    // Create a unique identifier but keep the original file name
+    // Create a unique identifier but keep the original file name - simplify to avoid encoding issues
     const referenceNumber = Date.now().toString();
-    const storageFileName = `${referenceNumber}_${originalFileName}`;
+    const storageFileName = `${referenceNumber}_${originalFileName.replace(/[^a-zA-Z0-9_.]/g, '_')}`;
     const storagePath = `documents/${storageFileName}`;
     
     console.log('Creating storage path:', storagePath);
     
     try {
-      // Add metadata with content type
+      // Add metadata with content type and CORS headers
       const metadata = {
         contentType: file.type,
         customMetadata: {
           'fileName': documentData.fileName,
           'originalFileName': originalFileName,
-          'referenceNumber': referenceNumber
+          'referenceNumber': referenceNumber,
+          'access-control-allow-origin': '*',
+          'allow_origin': '*',
+          'x-cors-bypass': 'true'
+        },
+        cors: {
+          origin: ['*'],
+          responseHeader: [
+            'Content-Type', 
+            'Content-Length', 
+            'Authorization', 
+            'User-Agent', 
+            'x-goog-resumable', 
+            'Content-Disposition',
+            'Accept',
+            'Origin',
+            'X-Requested-With'
+          ],
+          method: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
+          maxAgeSeconds: 3600
         }
       };
+      
+      console.log('Attempting upload with CORS settings:', metadata);
       
       // Use the enhanced upload method with fallback
       const uploadResult = await enhancedUploadFile(storagePath, file, metadata) as UploadResult;
       
       if (!uploadResult.success) {
+        console.warn("First upload attempt failed, trying local storage fallback");
         throw new Error("Upload failed: " + (uploadResult.error || "Unknown error"));
       }
       
@@ -312,11 +334,53 @@ export const uploadDocument = async (documentData: DocumentInput): Promise<Docum
       } as Document;
     } catch (uploadError) {
       console.error('Error during upload process:', uploadError);
+      
+      // Try local storage fallback directly
+      console.log('Attempting direct local storage fallback after upload error');
+      try {
+        const localResult = await localStorageFallback(file);
+        if (localResult.success) {
+          console.log('Local storage fallback successful');
+          
+          // Create document record in Firestore with local storage URL
+          const docData: any = {
+            fileName: documentData.fileName,
+            originalFileName: originalFileName,
+            fileUrl: localResult.url,
+            fileSize: formatFileSize(file.size),
+            fileType: file.type,
+            type: documentData.type,
+            leadId: documentData.leadId,
+            leadName: documentData.leadName,
+            company: documentData.company,
+            description: documentData.description || '',
+            tags: documentData.tags || [],
+            uploadedBy: documentData.uploadedBy,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            isLocalStorage: true,
+            localMetadata: localResult.metadata
+          };
+          
+          const docsRef = collection(db, 'documents');
+          const docRef = await addDoc(docsRef, docData);
+          
+          return {
+            id: docRef.id,
+            ...docData,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          } as Document;
+        }
+      } catch (localError) {
+        console.error('Local storage fallback also failed:', localError);
+      }
+      
       throw uploadError;
     }
   } catch (error) {
     console.error('Error uploading document:', error);
-    throw new Error('Failed to upload document');
+    throw new Error('Failed to upload document: ' + (error.message || 'Unknown error'));
   }
 };
 

@@ -1,4 +1,4 @@
-export type LeadStage = "new" | "contacted" | "qualified" | "proposal" | "project";
+export type LeadStage = "new" | "contacted" | "qualified" | "proposal" | "project" | "rejected";
 
 export interface Lead {
   id: string;

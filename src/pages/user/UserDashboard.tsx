@@ -72,7 +72,8 @@ const UserDashboard = () => {
   
   // Calculate statistics
   const totalLeads = leads.length;
-  const activeLeads = leads.filter(lead => lead.stage !== 'project').length;
+  const totalActiveLeads = leads.filter(lead => lead.stage !== 'rejected').length;
+  const activeLeads = leads.filter(lead => lead.stage !== 'project' && lead.stage !== 'rejected').length;
   
   // Calculate lead counts by stage
   const leadCountsByStage = {
@@ -81,6 +82,7 @@ const UserDashboard = () => {
     qualified: leads.filter(lead => lead.stage === 'qualified').length,
     proposal: leads.filter(lead => lead.stage === 'proposal').length,
     project: leads.filter(lead => lead.stage === 'project').length,
+    rejected: leads.filter(lead => lead.stage === 'rejected').length,
   };
   
   // Calculate earnings (10% of value for leads in 'project' stage)
@@ -91,6 +93,10 @@ const UserDashboard = () => {
   const qualifiedLeads = leads.filter(lead => 
     ["qualified", "proposal", "project"].includes(lead.stage)
   ).length;
+  
+  const conversionRate = totalActiveLeads > 0 
+    ? Math.round((qualifiedLeads / totalActiveLeads) * 100)
+    : 0;
   
   return (
     <AppLayout requiredRole="user">
@@ -141,13 +147,14 @@ const UserDashboard = () => {
                 icon={<DollarSign size={24} />}
               />
               <StatsCard 
-                title="Qualified Leads" 
-                value={qualifiedLeads}
-                icon={<Check size={24} />}
+                title="Conversion Rate" 
+                value={`${conversionRate}%`}
+                description="Qualified to total leads"
+                icon={<PieChart size={24} />}
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 bg-white p-6 rounded-lg shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 bg-white p-6 rounded-lg shadow-sm">
               <h3 className="text-lg font-medium col-span-full mb-2">Lead Status Count</h3>
               <StatsCard 
                 title="New" 
@@ -172,6 +179,11 @@ const UserDashboard = () => {
               <StatsCard 
                 title="Project" 
                 value={leadCountsByStage.project}
+                variant="compact"
+              />
+              <StatsCard 
+                title="Rejected" 
+                value={leadCountsByStage.rejected}
                 variant="compact"
               />
             </div>

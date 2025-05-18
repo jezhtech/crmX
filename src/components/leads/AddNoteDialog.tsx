@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Lead } from "@/types/lead";
@@ -7,18 +7,25 @@ import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { addNoteToLead } from "@/services/leadService";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 interface AddNoteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead: Lead;
+  onNoteAdded?: () => void;
 }
 
 const formSchema = z.object({
   content: z.string().min(1, "Note content is required")
 });
 
-const AddNoteDialog = ({ open, onOpenChange, lead }: AddNoteDialogProps) => {
+const AddNoteDialog = ({ open, onOpenChange, lead, onNoteAdded }: AddNoteDialogProps) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -27,9 +34,24 @@ const AddNoteDialog = ({ open, onOpenChange, lead }: AddNoteDialogProps) => {
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    // Here you would add the note to the lead in your database
-    console.log("Added note:", values);
-    onOpenChange(false);
+    if (!user?.id) {
+      toast.error("You must be logged in to add notes");
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await addNoteToLead(lead.id, values.content, user.id);
+      toast.success("Note added successfully");
+      form.reset();
+      if (onNoteAdded) onNoteAdded();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error adding note:", error);
+      toast.error("Failed to add note");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -60,10 +82,17 @@ const AddNoteDialog = ({ open, onOpenChange, lead }: AddNoteDialogProps) => {
             />
             
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
-              <Button type="submit">Add Note</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Adding..." : "Add Note"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

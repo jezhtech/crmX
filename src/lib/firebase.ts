@@ -3,7 +3,8 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore, collection, getDocs, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getStorage, ref, uploadBytes, getDownloadURL, uploadBytesResumable } from "firebase/storage";
+import { getFunctions } from "firebase/functions";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -22,9 +23,28 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
+const functions = getFunctions(app);
 
 // Initialize Storage with custom settings to fix CORS issues
-const storage = getStorage(app);
+const storageCorsSettings = {
+  cors: [{
+    origin: ['*'],
+    method: ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'],
+    maxAgeSeconds: 3600,
+    responseHeader: [
+      'Content-Type', 
+      'Content-Length', 
+      'Authorization', 
+      'User-Agent', 
+      'x-goog-resumable', 
+      'Content-Disposition',
+      'Accept',
+      'Origin',
+      'X-Requested-With'
+    ]
+  }]
+};
 
 // Set custom storage settings
 const storageSettings = {
@@ -81,6 +101,10 @@ const safeUploadFile = async (path: string, file: File, metadata?: any) => {
     const blob = new Blob([fileData as ArrayBuffer], { type: file.type });
     
     console.log("File prepared as Blob for upload:", blob.size, "bytes");
+
+    // Get current origin for CORS settings
+    const origin = window.location.origin;
+    console.log("Current origin:", origin);
     
     // Upload with retry mechanism
     let attempt = 0;
@@ -92,21 +116,65 @@ const safeUploadFile = async (path: string, file: File, metadata?: any) => {
         attempt++;
         console.log(`Upload attempt ${attempt}/${maxAttempts}`);
         
-        // Add special metadata to help with CORS
+        // Add special metadata to help with CORS - using wildcard origin and explicit HTTP origins
         const enhancedMetadata = {
           contentType: file.type,
           customMetadata: {
             ...(metadata?.customMetadata || {}),
             'x-cors-bypass': 'true',
-            'access-control-allow-origin': '*'
+            'access-control-allow-origin': '*',
+            'allow_origin': '*',
+            'http-origin': origin
+          },
+          // Add explicit CORS headers for the upload
+          cors: {
+            origin: ['*', origin, 'http://192.168.0.181:8080', 'http://localhost:3000', 'http://localhost:5173'],
+            responseHeader: [
+              'Content-Type', 
+              'Authorization', 
+              'Content-Length', 
+              'User-Agent', 
+              'x-goog-resumable', 
+              'Content-Disposition',
+              'Accept',
+              'Origin',
+              'X-Requested-With',
+              'Access-Control-Allow-Origin',
+              'ETag'
+            ],
+            method: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'HEAD'],
+            maxAgeSeconds: 3600
           }
         };
         
+        // Try uploadBytes with enhanced metadata
+        console.log("Attempting upload with enhanced metadata");
         uploadResult = await uploadBytes(storageRef, blob, enhancedMetadata);
         console.log("Upload successful:", uploadResult.ref.fullPath);
         break; // Success, exit loop
       } catch (err) {
         console.warn(`Upload attempt ${attempt} failed:`, err);
+        
+        // If we're on the last attempt, try a different approach for HTTP origins
+        if (attempt >= maxAttempts - 1 && origin.startsWith('http:')) {
+          try {
+            console.log("Trying alternative upload approach for HTTP origin");
+            // Simpler metadata for the last attempt
+            const simpleMetadata = {
+              contentType: file.type,
+            };
+            
+            // Try uploadBytesResumable as a fallback for HTTP origins
+            const uploadTask = uploadBytesResumable(storageRef, blob, simpleMetadata);
+            const snapshot = await uploadTask;
+            uploadResult = snapshot;
+            console.log("Alternative upload approach successful");
+            break;
+          } catch (alternativeErr) {
+            console.error("Alternative upload approach failed:", alternativeErr);
+          }
+        }
+        
         if (attempt >= maxAttempts) throw err;
         await new Promise(r => setTimeout(r, 1000)); // Wait before retry
       }
@@ -180,26 +248,99 @@ const localStorageFallback = async (file: File) => {
   }
 };
 
-// Enhanced safe upload with fallback
-const enhancedUploadFile = async (path: string, file: File, metadata?: any, useLocalFallback = true) => {
+// Alternative upload method using fetch directly (better CORS support)
+const fetchUploadFile = async (path: string, file: File, metadata?: any) => {
   try {
-    // First try Firebase Storage
-    const result = await safeUploadFile(path, file, metadata);
-    if (result.success) return result;
+    console.log("Starting direct fetch upload method for path:", path);
     
-    // If Firebase fails and fallback is enabled, try local storage
+    // Create a full URL for the upload
+    const bucket = firebaseConfig.storageBucket;
+    const uploadUrl = `https://storage.googleapis.com/upload/storage/v1/b/${bucket}/o?name=${encodeURIComponent(path)}`;
+    
+    console.log("Using upload URL:", uploadUrl);
+    
+    // Prepare headers for the request
+    const headers = new Headers();
+    headers.append('Content-Type', file.type);
+    headers.append('X-Goog-Upload-Protocol', 'resumable');
+    headers.append('X-Goog-Upload-Command', 'start');
+    
+    // Add CORS-related headers
+    headers.append('Origin', window.location.origin);
+    headers.append('Access-Control-Request-Method', 'POST');
+    headers.append('Access-Control-Request-Headers', 'Content-Type, X-Goog-Upload-Protocol, X-Goog-Upload-Command');
+    
+    // Upload the file using fetch API
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: headers,
+      body: file,
+      mode: 'cors',
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}: ${await response.text()}`);
+    }
+    
+    // Parse the response to get the file URL
+    const data = await response.json();
+    console.log("Upload response:", data);
+    
+    // Get the download URL
+    let downloadUrl = data.mediaLink;
+    if (!downloadUrl) {
+      downloadUrl = `https://storage.googleapis.com/${bucket}/${encodeURIComponent(path)}`;
+    }
+    
+    return {
+      success: true,
+      url: downloadUrl,
+      metadata: data
+    };
+  } catch (error) {
+    console.error("Error in fetchUploadFile:", error);
+    return {
+      success: false,
+      error,
+      usedMethod: 'fetch'
+    };
+  }
+};
+
+// Modify the enhancedUploadFile function to include the fetch upload method
+const enhancedUploadFile = async (path: string, file: File, metadata?: any, useLocalFallback = true) => {
+  console.log("Enhanced upload for file:", file.name, "to path:", path);
+  
+  // First try the normal Firebase upload
+  try {
+    const result = await safeUploadFile(path, file, metadata);
+    if (result.success) {
+      console.log("Standard upload succeeded");
+      return result;
+    }
+    
+    console.log("Standard upload failed, trying fetch method");
+    // If that fails, try the fetch method
+    const fetchResult = await fetchUploadFile(path, file, metadata);
+    if (fetchResult.success) {
+      console.log("Fetch upload succeeded");
+      return fetchResult;
+    }
+    
+    // If that also fails and local fallback is enabled, use localStorage
     if (useLocalFallback) {
-      console.log("Firebase upload failed, trying local storage");
+      console.log("All remote methods failed, using local storage fallback");
       return await localStorageFallback(file);
     }
     
-    return result; // Return the original error if no fallback
+    return { success: false, error: "All upload methods failed" };
   } catch (error) {
     console.error("Error in enhancedUploadFile:", error);
     
     // Try local fallback if enabled
     if (useLocalFallback) {
-      console.log("Error caught, trying local storage fallback");
+      console.log("Error occurred, using local storage fallback");
       return await localStorageFallback(file);
     }
     
@@ -216,7 +357,8 @@ export {
   analytics, 
   db, 
   auth, 
-  storage, 
+  storage,
+  functions,
   testFirestore,
   safeUploadFile, 
   enhancedUploadFile, 

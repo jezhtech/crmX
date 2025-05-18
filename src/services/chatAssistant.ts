@@ -11,6 +11,8 @@ import {
   Timestamp,
   limit,
   onSnapshot,
+  doc,
+  updateDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -337,11 +339,12 @@ export const getUserNotifications = async (userId: string): Promise<Notification
 
 export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
   try {
-    await addDoc(collection(db, NOTIFICATIONS_COLLECTION, notificationId), {
-      isRead: true,
+    const notificationRef = doc(db, NOTIFICATIONS_COLLECTION, notificationId);
+    await updateDoc(notificationRef, {
+      isRead: true
     });
   } catch (error) {
     console.error("Error marking notification as read:", error);
     throw error;
   }
-  };
+};

@@ -53,6 +53,7 @@ const AdminDashboard = () => {
   
   // Calculate statistics
   const totalLeads = leads.length;
+  const totalActiveLeads = leads.filter(lead => lead.stage !== 'rejected').length;
   const totalUsers = users.length;
   const totalValue = leads.reduce((sum, lead) => sum + lead.value, 0);
   const qualifiedLeads = leads.filter(lead => 
@@ -66,6 +67,7 @@ const AdminDashboard = () => {
     qualified: leads.filter(lead => lead.stage === 'qualified').length,
     proposal: leads.filter(lead => lead.stage === 'proposal').length,
     project: leads.filter(lead => lead.stage === 'project').length,
+    rejected: leads.filter(lead => lead.stage === 'rejected').length,
   };
   
   // Format data for revenue graph - group projects by month
@@ -100,8 +102,8 @@ const AdminDashboard = () => {
     });
   })();
   
-  const conversionRate = totalLeads > 0 
-    ? Math.round((qualifiedLeads / totalLeads) * 100) 
+  const conversionRate = totalActiveLeads > 0 
+    ? Math.round((qualifiedLeads / totalActiveLeads) * 100) 
     : 0;
   
   return (
@@ -141,7 +143,7 @@ const AdminDashboard = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4 bg-white p-6 rounded-lg shadow-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 bg-white p-6 rounded-lg shadow-sm">
               <h3 className="text-lg font-medium col-span-full mb-2">Lead Status Count</h3>
               <StatsCard 
                 title="New" 
@@ -166,6 +168,11 @@ const AdminDashboard = () => {
               <StatsCard 
                 title="Project" 
                 value={leadCountsByStage.project}
+                variant="compact"
+              />
+              <StatsCard 
+                title="Rejected" 
+                value={leadCountsByStage.rejected}
                 variant="compact"
               />
             </div>

@@ -12,6 +12,7 @@ const STAGE_COLORS = {
   qualified: "#10B981", // emerald-500
   proposal: "#8B5CF6", // violet-500
   project: "#6366F1", // indigo-500
+  rejected: "#EF4444", // red-500
 };
 
 const LeadsByStageChart = ({ leads }: LeadsByStageChartProps) => {
@@ -35,6 +36,7 @@ const LeadsByStageChart = ({ leads }: LeadsByStageChartProps) => {
       qualified: "Qualified",
       proposal: "Proposal",
       project: "Project",
+      rejected: "Rejected",
     }[stage];
   }
 

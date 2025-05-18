@@ -73,7 +73,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { v4 as uuidv4 } from 'uuid';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { collection, addDoc } from 'firebase/firestore';
-import { db, storage, safeUploadFile, enhancedUploadFile } from '@/lib/firebase';
+import { db, storage, safeUploadFile, enhancedUploadFile, localStorageFallback } from '@/lib/firebase';
+import { uploadWithFallback } from '@/lib/firebaseStorage';
 import { Progress } from "@/components/ui/progress";
 
 // Form validation schema
@@ -315,25 +316,17 @@ const AdminDocuments = () => {
       const description = form.getValues("description") || "";
       
       // Generate a unique ID for this document
-      const documentId = uuidv4();
+      const documentId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
       console.log("Creating document with ID:", documentId);
       
-      // 1. Upload the file using a simpler method
       console.log("Starting file upload for:", fileInput.name);
       
-      // Create an extremely simple path structure
-      const storageRef = ref(storage, `files/${documentId}`);
+      // Create a storage path
+      const storagePath = `files/${documentId}`;
       
-      // Perform a simple upload with minimal configuration
-      const uploadTask = uploadBytes(storageRef, fileInput);
-      console.log("Upload started...");
-      
-      const snapshot = await uploadTask;
-      console.log("Upload completed", snapshot);
-      
-      // 2. Get the download URL
-      const downloadUrl = await getDownloadURL(snapshot.ref);
-      console.log("Download URL:", downloadUrl);
+      // Use our enhanced upload method with fallback mechanisms
+      const downloadUrl = await uploadWithFallback(storagePath, fileInput);
+      console.log("Upload completed, download URL:", downloadUrl);
       
       // 3. Create the document in Firestore
       const docData = {
@@ -518,88 +511,64 @@ const AdminDocuments = () => {
         return;
       }
       
-      if (!localFileName) {
+      if (!localFileName.trim()) {
         toast({
           title: 'Missing information',
-          description: 'Please provide a display name for the document',
+          description: 'Please enter a document name',
           variant: 'destructive'
         });
         return;
       }
       
-      setIsSaving(true);
-      
       try {
-        // Generate a document ID - simpler format to avoid encoding issues
-        const timestamp = Date.now();
-        const documentId = `doc_${timestamp}`;
-        console.log("Creating document with simple ID:", documentId);
+        setIsSaving(true);
+        setUploadProgress(10); // Show initial progress
         
-        // 1. Create a very simple storage path - avoid special characters
-        const simplePath = `documents/doc_${timestamp}`;
-        console.log("Using simplified storage path:", simplePath);
+        // Generate a simple unique ID
+        const documentId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
         
-        // 2. Use our enhanced upload function with local fallback
-        console.log("Starting upload with fallback...");
-        const uploadResult = await enhancedUploadFile(simplePath, localFile) as UploadResult;
+        // Storage path
+        const storagePath = `files/${documentId}`;
         
-        if (!uploadResult.success) {
-          throw new Error("Upload failed: " + (uploadResult.error || "Unknown error"));
-        }
+        // Use the CORS-resistant upload function
+        const downloadUrl = await uploadWithFallback(storagePath, localFile);
         
-        console.log("Upload completed successfully");
+        setUploadProgress(70);
         
-        // 3. Get the download URL from result
-        const downloadUrl = uploadResult.url;
-        console.log("Download URL:", downloadUrl);
-        
-        // Add a flag for local storage files to track and handle them differently
-        const isLocalStorage = !!uploadResult.isLocal;
-        
-        // 4. Store the document metadata in Firestore
-        console.log("Saving document metadata to Firestore...");
+        // Create the document metadata in Firestore
         const docData = {
           id: documentId,
           fileName: localFileName,
           originalFileName: localFile.name,
           fileUrl: downloadUrl,
-          fileType: localFile.type || "",
-          fileSize: localFile.size || 0,
-          leadId: localLeadId || "general",
+          fileType: localFile.type,
+          fileSize: localFile.size,
+          leadId: localLeadId,
           leadName: leads.find(lead => lead.id === localLeadId)?.name || "General",
           company: leads.find(lead => lead.id === localLeadId)?.company || "General",
           type: localDocType || "other",
-          description: localDescription || "",
+          description: localDescription,
           tags: [],
           uploadedBy: user?.id || "anonymous",
-          createdAt: new Date().toISOString(),
-          isLocalStorage: isLocalStorage, // Track if it's a local storage file
-          localMetadata: isLocalStorage ? uploadResult.metadata : null
+          createdAt: new Date().toISOString()
         };
         
         // Save to Firestore
         await addDoc(collection(db, 'documents'), docData);
-        console.log("Document metadata saved to Firestore");
+        setUploadProgress(100);
         
-        // Show success message with info about local storage if applicable
-        if (isLocalStorage) {
-          toast({
-            title: 'Document uploaded locally',
-            description: 'Document saved in browser storage due to connection issues. It will be available until you close this browser window.',
-          });
-        } else {
-          toast({
-            title: 'Document uploaded',
-            description: 'Document has been successfully uploaded and saved',
-          });
-        }
-        
-        // Close dialog and reset form
-        setAddDialogOpen(false);
-        
-        // Refresh document list
+        // Refresh the document list
         const docsData = await getAllDocuments();
         setDocuments(docsData);
+        
+        // Success message
+        toast({
+          title: 'Document uploaded',
+          description: 'Document has been successfully uploaded and saved',
+        });
+        
+        // Close dialog
+        setAddDialogOpen(false);
       } catch (error) {
         console.error("Error uploading document:", error);
         toast({

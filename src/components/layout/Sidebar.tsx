@@ -64,9 +64,9 @@ const Sidebar = () => {
     <aside
       className={`bg-sidebar text-sidebar-foreground ${
         collapsed ? "w-16" : "w-56"
-      } flex flex-col transition-all duration-300 ease-in-out`}
+      } h-screen flex flex-col overflow-y-auto transition-all duration-300 ease-in-out`}
     >
-      <div className="flex items-center justify-between p-4">
+      <div className="flex items-center justify-between p-4 sticky top-0 bg-sidebar z-10">
         <div className="flex items-center">
           {!collapsed ? (
             <Logo variant="text" className="text-white" />
@@ -161,7 +161,7 @@ const Sidebar = () => {
         </div>
       )}
 
-      <div className="p-4">
+      <div className="p-4 sticky bottom-0 bg-sidebar">
         <div className="rounded-md bg-sidebar-accent/30 p-3">
           {!collapsed && (
             <div className="text-xs">

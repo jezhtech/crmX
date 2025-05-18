@@ -11,12 +11,14 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { getUserNotifications, Notification, markNotificationAsRead } from "@/services/chatAssistant";
+import { getAdminNotifications, markNotificationRead, markAllAdminNotificationsRead } from "@/services/notificationService";
 
 const Navbar = () => {
   const { user, logout } = useAuth();
   const { toast } = useToast();
   const [showDropdown, setShowDropdown] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [adminNotifications, setAdminNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -31,34 +33,77 @@ const Navbar = () => {
     if (!user) return;
     
     try {
+      // Get user notifications
       const userNotifications = await getUserNotifications(user.id);
+      
+      // If the user is an admin, also get admin-specific notifications
+      let allNotifications = [...userNotifications];
+      let adminLeadNotifications: any[] = [];
+      
+      if (user.role === 'admin') {
+        adminLeadNotifications = await getAdminNotifications();
+        setAdminNotifications(adminLeadNotifications);
+        allNotifications = [...userNotifications, ...adminLeadNotifications];
+      }
+      
       setNotifications(userNotifications);
       
-      // Count unread notifications
-      const unread = userNotifications.filter(n => !n.isRead).length;
-      setUnreadCount(unread);
+      // Count unread notifications from both sources
+      const userUnreadCount = userNotifications.filter(n => !n.isRead).length;
+      const adminUnreadCount = adminLeadNotifications.filter(n => !n.isRead).length;
+      setUnreadCount(userUnreadCount + adminUnreadCount);
     } catch (error) {
       console.error("Error loading notifications:", error);
     }
   };
 
-  const handleMarkAsRead = async (notificationId: string) => {
+  const handleMarkAsRead = async (notificationId: string, isAdminNotification = false) => {
     try {
-      await markNotificationAsRead(notificationId);
-      
-      // Update notifications list
-      setNotifications(prev => 
-        prev.map(n => 
-          n.id === notificationId 
-            ? { ...n, isRead: true } 
-            : n
-        )
-      );
+      if (isAdminNotification) {
+        await markNotificationRead(notificationId);
+        
+        // Update admin notifications list
+        setAdminNotifications(prev => 
+          prev.map(n => 
+            n.id === notificationId 
+              ? { ...n, isRead: true } 
+              : n
+          )
+        );
+      } else {
+        await markNotificationAsRead(notificationId);
+        
+        // Update user notifications list
+        setNotifications(prev => 
+          prev.map(n => 
+            n.id === notificationId 
+              ? { ...n, isRead: true } 
+              : n
+          )
+        );
+      }
       
       // Update unread count
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error("Error marking notification as read:", error);
+    }
+  };
+  
+  const handleMarkAllAsRead = async () => {
+    try {
+      // If admin, mark all admin notifications as read
+      if (user?.role === 'admin') {
+        await markAllAdminNotificationsRead();
+        setAdminNotifications(prev => 
+          prev.map(n => ({ ...n, isRead: true }))
+        );
+      }
+      
+      // Update unread count
+      setUnreadCount(0);
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
     }
   };
 
@@ -71,7 +116,7 @@ const Navbar = () => {
   };
 
   return (
-    <header className="border-b bg-white py-3 px-4 sm:px-6 shadow-sm">
+    <header className="border-b bg-white py-3 px-4 sm:px-6 shadow-sm w-full z-20">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-6">
           <Logo size="small" variant="text" className="hidden sm:flex" />
@@ -103,44 +148,100 @@ const Navbar = () => {
             <PopoverContent className="w-80 p-0" align="end">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="font-medium">Notifications</h3>
-                {notifications.length > 0 && (
-                  <Button variant="ghost" size="sm" className="text-xs">
+                {(notifications.length > 0 || adminNotifications.length > 0) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="text-xs"
+                    onClick={handleMarkAllAsRead}
+                  >
                     Mark all as read
                   </Button>
                 )}
               </div>
               
               <ScrollArea className="h-80">
-                {notifications.length > 0 ? (
+                {(notifications.length > 0 || adminNotifications.length > 0) ? (
                   <div>
-                    {notifications.map((notification) => (
-                      <div 
-                        key={notification.id} 
-                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 ${!notification.isRead ? 'bg-blue-50/30' : ''}`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="text-sm font-medium">{notification.title}</h4>
-                            <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
-                            <p className="text-xs text-gray-400 mt-2">
-                              {notification.timestamp instanceof Date 
-                                ? notification.timestamp.toLocaleString() 
-                                : new Date().toLocaleString()}
-                            </p>
-                          </div>
-                          {!notification.isRead && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-6 w-6"
-                              onClick={() => notification.id && handleMarkAsRead(notification.id)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          )}
+                    {/* Admin Lead Notifications */}
+                    {user?.role === 'admin' && adminNotifications.length > 0 && (
+                      <>
+                        <div className="px-4 py-2 bg-gray-50 border-b">
+                          <p className="text-xs font-medium text-gray-500">LEAD NOTIFICATIONS</p>
                         </div>
-                      </div>
-                    ))}
+                        {adminNotifications.map((notification) => (
+                          <div 
+                            key={notification.id} 
+                            className={`p-4 border-b border-gray-100 hover:bg-gray-50 ${!notification.isRead ? 'bg-blue-50/30' : ''}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="text-sm font-medium">{notification.title}</h4>
+                                <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
+                                <p className="text-xs text-gray-400 mt-2">
+                                  {notification.timestamp instanceof Date 
+                                    ? notification.timestamp.toLocaleString() 
+                                    : notification.timestamp?.toDate 
+                                      ? notification.timestamp.toDate().toLocaleString()
+                                      : new Date().toLocaleString()}
+                                </p>
+                              </div>
+                              {!notification.isRead && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6"
+                                  onClick={() => handleMarkAsRead(notification.id, true)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {/* User Notifications */}
+                    {notifications.length > 0 && (
+                      <>
+                        {user?.role === 'admin' && adminNotifications.length > 0 && (
+                          <div className="px-4 py-2 bg-gray-50 border-b">
+                            <p className="text-xs font-medium text-gray-500">SYSTEM NOTIFICATIONS</p>
+                          </div>
+                        )}
+                        {notifications.map((notification) => (
+                          <div 
+                            key={notification.id} 
+                            className={`p-4 border-b border-gray-100 hover:bg-gray-50 ${!notification.isRead ? 'bg-blue-50/30' : ''}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <h4 className="text-sm font-medium">{notification.title}</h4>
+                                <p className="text-xs text-gray-500 mt-1">{notification.message}</p>
+                                <p className="text-xs text-gray-400 mt-2">
+                                  {notification.timestamp instanceof Date 
+                                    ? notification.timestamp.toLocaleString() 
+                                    : notification.timestamp?.toDate 
+                                      ? notification.timestamp.toDate().toLocaleString()
+                                      : new Date().toLocaleString()}
+                                </p>
+                              </div>
+                              {!notification.isRead && (
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6"
+                                  onClick={() => notification.id && handleMarkAsRead(notification.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-4 text-gray-500">
@@ -166,7 +267,7 @@ const Navbar = () => {
             </button>
 
             {showDropdown && (
-              <div className="absolute right-0 z-10 mt-2 w-48 rounded-md border border-gray-100 bg-white py-2 shadow-lg">
+              <div className="absolute right-0 z-30 mt-2 w-48 rounded-md border border-gray-100 bg-white py-2 shadow-lg">
                 <div className="px-4 py-2 text-sm text-gray-500">
                   {user?.email}
                 </div>

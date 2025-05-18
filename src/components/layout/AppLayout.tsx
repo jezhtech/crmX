@@ -39,14 +39,20 @@ const AppLayout = ({ children, requiredRole = "any" }: AppLayoutProps) => {
   }
 
   return (
-    <div className="min-h-screen flex w-full">
-      <Sidebar />
-      <div className="flex-1 flex flex-col min-h-screen">
-        <Navbar />
-        <main className="flex-1 p-6 bg-gray-50">
+    <div className="h-screen flex w-full overflow-hidden">
+      <div className="fixed inset-y-0 left-0">
+        <Sidebar />
+      </div>
+      <div className="flex-1 flex flex-col ml-16 sm:ml-56">
+        <div className="sticky top-0 z-10">
+          <Navbar />
+        </div>
+        <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {children}
         </main>
-        <Footer />
+        <div className="sticky bottom-0 z-10">
+          <Footer />
+        </div>
       </div>
       <ChatAssistant />
     </div>

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Lead } from "@/types/lead";
@@ -7,11 +7,16 @@ import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { updateLead, addNoteToLead } from "@/services/leadService";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { formatCurrency } from "@/lib/utils";
 
 interface EditLeadDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   lead: Lead;
+  onLeadUpdated?: () => void;
 }
 
 const formSchema = z.object({
@@ -22,7 +27,10 @@ const formSchema = z.object({
   value: z.coerce.number().min(0, "Value must be a positive number").optional(),
 });
 
-const EditLeadDialog = ({ open, onOpenChange, lead }: EditLeadDialogProps) => {
+const EditLeadDialog = ({ open, onOpenChange, lead, onLeadUpdated }: EditLeadDialogProps) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
+  
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -35,9 +43,50 @@ const EditLeadDialog = ({ open, onOpenChange, lead }: EditLeadDialogProps) => {
   });
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
-    // Here you would update the lead in your database
-    console.log("Updated lead:", values);
-    onOpenChange(false);
+    if (!user?.id) {
+      toast.error("You must be logged in to update lead information");
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      
+      // Find what fields changed
+      const changes = [];
+      if (values.name !== lead.name) {
+        changes.push(`Name changed from "${lead.name}" to "${values.name}"`);
+      }
+      if (values.company !== lead.company) {
+        changes.push(`Company changed from "${lead.company}" to "${values.company}"`);
+      }
+      if (values.email !== lead.email) {
+        changes.push(`Email changed from "${lead.email || 'none'}" to "${values.email || 'none'}"`);
+      }
+      if (values.phone !== lead.phone) {
+        changes.push(`Phone changed from "${lead.phone || 'none'}" to "${values.phone || 'none'}"`);
+      }
+      if (values.value !== lead.value) {
+        changes.push(`Value changed from ${formatCurrency(lead.value || 0)} to ${formatCurrency(values.value || 0)}`);
+      }
+      
+      // Update the lead
+      await updateLead(lead.id, values);
+      
+      // Only add a note if something actually changed
+      if (changes.length > 0) {
+        const noteContent = `Lead information updated:\n${changes.join('\n')}`;
+        await addNoteToLead(lead.id, noteContent, user.id);
+      }
+      
+      toast.success("Lead updated successfully");
+      if (onLeadUpdated) onLeadUpdated();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error updating lead:", error);
+      toast.error("Failed to update lead");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -120,10 +169,17 @@ const EditLeadDialog = ({ open, onOpenChange, lead }: EditLeadDialogProps) => {
             />
             
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
-              <Button type="submit">Save Changes</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

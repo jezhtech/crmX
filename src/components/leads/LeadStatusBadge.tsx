@@ -1,4 +1,3 @@
-
 import { LeadStage } from "@/types/lead";
 
 interface LeadStatusBadgeProps {
@@ -18,6 +17,8 @@ const LeadStatusBadge = ({ stage }: LeadStatusBadgeProps) => {
         return "stage-badge stage-proposal";
       case "project":
         return "stage-badge stage-project";
+      case "rejected":
+        return "stage-badge stage-rejected";
       default:
         return "stage-badge stage-new";
     }
@@ -35,6 +36,8 @@ const LeadStatusBadge = ({ stage }: LeadStatusBadgeProps) => {
         return "Proposal";
       case "project":
         return "Project";
+      case "rejected":
+        return "Rejected";
       default:
         return "Unknown";
     }
